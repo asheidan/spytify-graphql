@@ -4,10 +4,29 @@ import json
 import sys
 
 import graphene
+import promise
 
 class PlaylistTracks(graphene.ObjectType):
     href = graphene.String()
     total = graphene.Int()
+
+
+class PlaylistLoader(promise.dataloader.DataLoader):
+
+    def get_playlist(self, id):
+        def fetcher(resolve, reject):
+            if getattr(self, "_playlists") is None:
+                with open("playlists.json", "r") as data_file:
+                    self._playlists = json.load(data_file)
+
+            for playlist in self._playlists:
+                if playlist.get("id") == id:
+                    resolve(playlist)
+
+        return promise.Promise(fetcher)
+
+    def batch_load_fn(self, keys):
+        return promise.Promise.resolve([self.get_playlist(id=key) for key in keys])
 
 class Playlist(graphene.ObjectType):
 
@@ -43,9 +62,6 @@ class Query(graphene.ObjectType):
 schema = graphene.Schema(query=Query)
 
 if __name__ == "__main__" and len(sys.argv) > 1:
-    data = []
-    with open("playlists.json", "r") as data_file:
-        data = json.load(data_file)
 
     result = schema.execute(sys.argv[1], context_value=data)
     if result.errors:
